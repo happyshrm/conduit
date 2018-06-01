@@ -12,10 +12,12 @@ import (
 	"github.com/runconduit/conduit/controller/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/cache"
 )
 
 type server struct {
-	podsByIp  k8s.PodIndex
+	api       *k8s.API
 	resolvers []streamingDestinationResolver
 	enableTLS bool
 }
@@ -30,17 +32,8 @@ type server struct {
 //
 // Addresses for the given destination are fetched from the Kubernetes Endpoints
 // API.
-func NewServer(addr, kubeconfig, k8sDNSZone string, enableTLS bool, done chan struct{}) (*grpc.Server, net.Listener, error) {
+func NewServer(addr, kubeconfig, k8sDNSZone string, enableTLS bool, api *k8s.API, done chan struct{}) (*grpc.Server, net.Listener, error) {
 	clientSet, err := k8s.NewClientSet(kubeconfig)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	podsByIp, err := k8s.NewPodsByIp(clientSet)
-	if err != nil {
-		return nil, nil, err
-	}
-	err = podsByIp.Run()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -56,8 +49,17 @@ func NewServer(addr, kubeconfig, k8sDNSZone string, enableTLS bool, done chan st
 		return nil, nil, err
 	}
 
+	api.Pod.Informer().AddIndexers(cache.Indexers{
+		"ip": func(obj interface{}) ([]string, error) {
+			if pod, ok := obj.(*v1.Pod); ok {
+				return []string{pod.Status.PodIP}, nil
+			}
+			return []string{""}, fmt.Errorf("object is not a pod")
+		},
+	})
+
 	srv := server{
-		podsByIp:  podsByIp,
+		api:       api,
 		resolvers: resolvers,
 		enableTLS: enableTLS,
 	}
@@ -104,6 +106,22 @@ func (s *server) Get(dest *common.Destination, stream pb.Destination_GetServer) 
 	}
 
 	return s.streamResolutionUsingCorrectResolverFor(host, port, stream)
+}
+
+func (s *server) podsByIp(ip string) ([]*v1.Pod, error) {
+	objs, err := s.api.Pod.Informer().GetIndexer().ByIndex("ip", ip)
+	if err != nil {
+		return nil, err
+	}
+	pods := make([]*v1.Pod, 0)
+	for _, obj := range objs {
+		pod, ok := obj.(*v1.Pod)
+		if !ok {
+			return nil, fmt.Errorf("not a pod")
+		}
+		pods = append(pods, pod)
+	}
+	return pods, nil
 }
 
 func (s *server) streamResolutionUsingCorrectResolverFor(host string, port int, stream pb.Destination_GetServer) error {

@@ -173,7 +173,7 @@ spec:
 			)
 			err := lister.Sync()
 			if err != nil {
-				t.Fatalf("timed out wait for caches to sync")
+				t.Fatal(err.Error())
 			}
 
 			rsp, err := fakeGrpcServer.ListPods(context.TODO(), &pb.Empty{})

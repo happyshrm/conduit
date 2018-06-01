@@ -183,7 +183,7 @@ status:
 
 			err = lister.Sync()
 			if err != nil {
-				t.Fatalf("timed out wait for caches to sync: %s", err)
+				t.Fatal(err.Error())
 			}
 
 			client, conn, err := NewClient(listener.Addr().String())

@@ -122,7 +122,7 @@ func testStatSummary(t *testing.T, expectations []statSumExpected) {
 		)
 		err := lister.Sync()
 		if err != nil {
-			t.Fatalf("timed out wait for caches to sync")
+			t.Fatal(err.Error())
 		}
 
 		rsp, err := fakeGrpcServer.StatSummary(context.TODO(), &exp.req)

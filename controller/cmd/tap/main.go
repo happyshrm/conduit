@@ -48,7 +48,7 @@ func main() {
 	go func() {
 		err := lister.Sync()
 		if err != nil {
-			log.Fatalf("timed out wait for caches to sync: %s", err)
+			log.Fatal(err.Error())
 		}
 	}()
 
